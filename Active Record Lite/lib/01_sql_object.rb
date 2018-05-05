@@ -49,7 +49,7 @@ class SQLObject
 
   def self.find(id)
     result  = DBConnection.execute("SELECT * FROM #{table_name} WHERE id = #{id}")
-    # result.nil? ? return nil : 
+    result.empty? ? nil : self.new(result.first)
   end
 
   def initialize(params = {})
@@ -65,30 +65,41 @@ class SQLObject
   end
 
   def attribute_values
-    @attributes.values
+    vals = []
+    self.class.columns.each do |atr|
+      vals << @attributes[atr] || nil
+    end
+    vals
   end
 
   def insert
-    cols = self.class.columns.drop(1).map(&:to_s)
-    question_marks = ['?'] * cols.length
-    col_string, question_mark_string = cols.join(','), question_marks.join(',')
-    DBConnection.execute(<<-SQL,*attribute_values.drop(1))
-      INSERT INTO
-      #{self.class.table_name} (#{col_string})
+    column_names = self.class.columns.drop(1).join(',')
+    questionmarks_string = ['?'] * (attribute_values.length - 1)
+    DBConnection.execute(<<-SQL, *attribute_values.drop(1))
+      INSERT INTO 
+        #{self.class.table_name} (#{column_names})
       VALUES
-      (#{question_mark_string}) 
+        (#{questionmarks_string.join(',')})
     SQL
     
     self.id = DBConnection.last_insert_row_id
-    insert
-    
   end
   
   def update
-    # ...
+    #col1 = ?, col2, = ?
+    update_str = self.class.columns.drop(1).map { |col| "#{col} = ?"}
+    DBConnection.execute(<<-SQL,*attribute_values.drop(1), id)
+      UPDATE
+        #{self.class.table_name}
+      SET
+        #{update_str.join(", ")}
+      WHERE
+        id = ?
+    SQL
+    
   end
 
   def save
-    # ...
+    id.nil? ? insert : update
   end
 end
